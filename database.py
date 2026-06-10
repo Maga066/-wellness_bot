@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import date, timedelta
 
-DB_NAME = "database.db"
+DB_NAME = "8108522195"
 
 
 def connect():
