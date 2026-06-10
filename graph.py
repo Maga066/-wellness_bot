@@ -1,59 +1,70 @@
-import io
-
-import matplotlib
-matplotlib.use('Agg')
+import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 
+def create_chart(records, filename):
+    if len(records) < 2:
+        return
 
-_MOOD_COLORS  = '#FF6B6B'
-_WORK_COLORS  = '#4ECDC4'
-_SLEEP_COLORS = '#45B7D1'
+    df = pd.DataFrame(records)
+    df['date'] = pd.to_datetime(df['date'])
 
+    fig, ax1 = plt.subplots(figsize=(10, 5))
 
-def generate_stats_graph(entries: list, title: str = "Статистика") -> io.BytesIO | None:
-    if not entries:
-        return None
+    color1 = '#FF6B6B'
+    ax1.set_xlabel('Дата')
+    ax1.set_ylabel('Настроение (1-5)', color=color1)
+    ax1.plot(df['date'], df['mood'], 'o-', color=color1, linewidth=2, markersize=6, label='Настроение')
+    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.set_ylim(0.5, 5.5)
 
-    dates  = [row['entry_date'] for row in entries]
-    moods  = [float(row['mood'])        for row in entries]
-    work   = [float(row['work_hours'])  for row in entries]
-    sleep  = [float(row['sleep_hours']) for row in entries]
+    ax2 = ax1.twinx()
+    color2 = '#4ECDC4'
+    color3 = '#45B7D1'
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-    fig.suptitle(title, fontsize=14, fontweight='bold', y=0.98)
+    ax2.set_ylabel('Часы', color=color2)
+    ax2.plot(df['date'], df['work_hours'], 's-', color=color2, linewidth=2, markersize=5, label='Работа')
+    ax2.plot(df['date'], df['sleep_hours'], 'd-', color=color3, linewidth=2, markersize=5, label='Сон')
+    ax2.tick_params(axis='y', labelcolor=color2)
 
-    # — Mood (line + fill) —
-    axes[0].plot(dates, moods, 'o-', color=_MOOD_COLORS, linewidth=2, markersize=5)
-    axes[0].fill_between(dates, moods, alpha=0.15, color=_MOOD_COLORS)
-    axes[0].set_ylabel('Настроение', fontsize=10)
-    axes[0].set_ylim(0.5, 5.5)
-    axes[0].set_yticks([1, 2, 3, 4, 5])
-    axes[0].grid(True, alpha=0.3)
-    for x, y in zip(dates, moods):
-        axes[0].annotate(str(int(y)), (x, y), textcoords='offset points',
-                         xytext=(0, 6), ha='center', fontsize=8)
-
-    # — Work hours (bar) —
-    axes[1].bar(dates, work, color=_WORK_COLORS, alpha=0.85, width=0.6)
-    axes[1].set_ylabel('Работа (ч)', fontsize=10)
-    axes[1].grid(True, alpha=0.3, axis='y')
-
-    # — Sleep hours (bar) —
-    axes[2].bar(dates, sleep, color=_SLEEP_COLORS, alpha=0.85, width=0.6)
-    axes[2].set_ylabel('Сон (ч)', fontsize=10)
-    axes[2].grid(True, alpha=0.3, axis='y')
-
-    # X-axis formatting
-    interval = 3 if len(dates) > 14 else 1
-    axes[2].xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-    axes[2].xaxis.set_major_locator(mdates.DayLocator(interval=interval))
-    plt.xticks(rotation=45, ha='right')
-
+    fig.legend(loc='upper left', bbox_to_anchor=(0.1, 0.9))
+    plt.title('Динамика самочувствия', fontsize=14, fontweight='bold')
+    plt.xticks(rotation=45)
     plt.tight_layout()
+    plt.savefig(filename, dpi=100, bbox_inches='tight')
+    plt.close()
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=110, bbox_inches='tight')
-    buf.seek(0)
-    plt.close(fig)
-    return buf
+
+def get_insights(records):
+    if not records:
+        return "Нет данных."
+
+    df = pd.DataFrame(records)
+    df['date'] = pd.to_datetime(df['date'])
+    df['weekday'] = df['date'].dt.day_name()
+
+    mood = round(df["mood"].mean(), 1)
+    work = round(df["work_hours"].mean(), 1)
+    sleep = round(df["sleep_hours"].mean(), 1)
+
+    weekday_mood = df.groupby('weekday')['mood'].mean().sort_values(ascending=False)
+    best_day = weekday_mood.index[0] if not weekday_mood.empty else "—"
+
+    high_sleep = df[df["sleep_hours"] >= 7.5]["mood"].mean() if len(df[df["sleep_hours"] >= 7.5]) > 0 else mood
+    low_sleep = df[df["sleep_hours"] < 7.5]["mood"].mean() if len(df[df["sleep_hours"] < 7.5]) > 0 else mood
+
+    low_work = df[df["work_hours"] < 4]["mood"].mean() if len(df[df["work_hours"] < 4]) > 0 else mood
+    high_work = df[df["work_hours"] >= 4]["mood"].mean() if len(df[df["work_hours"] >= 4]) > 0 else mood
+
+    sleep_msg = "😴 Сон > 7.5ч улучшает настроение" if high_sleep > low_sleep else "😴 Сон не сильно влияет на настроение"
+    work_msg = "💼 Работа < 4ч связана с лучшим настроением" if low_work > high_work else "💼 Работа не снижает настроение"
+
+    return (
+        f"📊 *Инсайты*\n\n"
+        f"📈 Среднее за {len(df)} дней:\n"
+        f"😊 Настроение: {mood}/5\n"
+        f"💼 Работа: {work}ч\n"
+        f"😴 Сон: {sleep}ч\n\n"
+        f"🌟 Лучший день: {best_day}\n\n"
+        f"{sleep_msg}\n"
+        f"{work_msg}"
+    )
