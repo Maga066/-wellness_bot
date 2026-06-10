@@ -51,7 +51,7 @@ def start_scheduler():
 
 if __name__ == '__main__':
     db.init_db()
-    db.load_test_data()
+    # db.load_test_data()
     register_handlers(bot)
     start_scheduler()
     print("🤖 Бот запущен. Нажмите Ctrl+C для остановки.")
